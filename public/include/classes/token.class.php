@@ -11,7 +11,11 @@ class Token Extends Base {
    * @param name string Setting name
    * @return value string Value
    **/
-  public function getToken($strToken) {
+  public function getToken($strToken, $strType=NULL) {
+    if (empty($strType) || ! $iToken_id = $this->tokentype->getTypeId($strType)) {
+      $this->setErrorMessage('Invalid token type: ' . $strType);
+      return false;
+    }
     $stmt = $this->mysqli->prepare("SELECT * FROM $this->table WHERE token = ? LIMIT 1");
     if ($stmt && $stmt->bind_param('s', $strToken) && $stmt->execute() && $result = $stmt->get_result())
       return $result->fetch_assoc();
@@ -25,11 +29,11 @@ class Token Extends Base {
    * @return mixed Token string on success, false on failure
    **/
   public function createToken($strType, $account_id=NULL) {
-    $strToken = hash('sha256', $account_id.$strType.microtime());
     if (!$iToken_id = $this->tokentype->getTypeId($strType)) {
       $this->setErrorMessage('Invalid token type: ' . $strType);
       return false;
     }
+    $strToken = bin2hex(openssl_random_pseudo_bytes(32));
     $stmt = $this->mysqli->prepare("
       INSERT INTO $this->table (token, type, account_id)
       VALUES (?, ?, ?)
@@ -49,6 +53,35 @@ class Token Extends Base {
     if ($stmt && $stmt->bind_param('s', $token) && $stmt->execute())
       return true;
     return $this->sqlError();
+  }
+
+  /**
+   * Cleanup token table of expired tokens
+   * @param none
+   * @return bool
+   **/
+  public function cleanupTokens() {
+    // Get all tokens that have an expiration set
+    if (!$aTokenTypes = $this->tokentype->getAllExpirations()) {
+      // Verbose error for crons since this should not happen
+      $this->setCronMessage('Failed to fetch tokens with expiration times: ' . $this->tokentype->getCronError());
+      return false;
+    }
+
+    $failed = $this->deleted = 0;
+    foreach ($aTokenTypes as $aTokenType) {
+      $stmt = $this->mysqli->prepare("DELETE FROM $this->table WHERE (NOW() - time) > ? AND type = ?");
+      if (! ($this->checkStmt($stmt) && $stmt->bind_param('ii', $aTokenType['expiration'], $aTokenType['id']) && $stmt->execute())) {
+        $failed++;
+      } else {
+        $this->deleted += $stmt->affected_rows;
+      }
+    }
+    if ($failed > 0) {
+      $this->setCronMessage('Failed to delete ' . $failed . ' token types from ' . $this->table . ' table');
+      return false;
+    }
+    return true;
   }
 }
 

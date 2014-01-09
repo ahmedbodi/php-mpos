@@ -3,12 +3,7 @@
 // Make sure we are called from index.php
 if (!defined('SECURITY')) die('Hacking attempt');
 
-// Load a list of themes available
-$aTmpThemes = glob(THEME_DIR . '/*');
-$aThemes = array();
-foreach ($aTmpThemes as $dir) {
-  if (basename($dir) != 'cache' && basename($dir) != 'compile' && basename($dir) != 'mail') $aThemes[basename($dir)] = basename($dir);
-}
+$aThemes = $template->getThemes();
 
 // Load the settings available in this system
 $aSettings['website'][] = array(
@@ -67,33 +62,47 @@ $aSettings['website'][] = array(
   'name' => 'website_mobile_theme', 'value' => $setting->getValue('website_mobile_theme'),
   'tooltip' => 'The mobile theme used for your pool.'
 );
-$aSettings['website'][] = array(
-  'display' => 'Blockexplorer URL', 'type' => 'text',
-  'size' => 50,
-  'default' => 'http://explorer.litecoin.net/block/',
-  'name' => 'website_blockexplorer_url', 'value' => $setting->getValue('website_blockexplorer_url'),
-  'tooltip' => 'URL to the blockexplorer website for your blockchain. Will append the blockhash to the URL. Leave empty to disabled this.'
-);
-$aSettings['website'][] = array(
+$aSettings['blockchain'][] = array(
   'display' => 'Disable Blockexplorer', 'type' => 'select',
   'options' => array( 0 => 'No', 1 => 'Yes' ),
   'default' => 0,
   'name' => 'website_blockexplorer_disabled', 'value' => $setting->getValue('website_blockexplorer_disabled'),
   'tooltip' => 'Enabled or disable the blockexplorer URL feature. Will remove any links using the blockexplorer URL.'
 );
-$aSettings['website'][] = array(
-  'display' => 'Chaininfo URL', 'type' => 'text',
+$aSettings['blockchain'][] = array(
+  'display' => 'Blockexplorer URL', 'type' => 'text',
   'size' => 50,
-  'default' => 'http://allchains.info',
-  'name' => 'website_chaininfo_url', 'value' => $setting->getValue('website_chaininfo_url'),
-  'tooltip' => 'URL to the chaininfo website for your blockchain. Leave empty to disabled this.'
+  'default' => 'http://explorer.litecoin.net/block/',
+  'name' => 'website_blockexplorer_url', 'value' => $setting->getValue('website_blockexplorer_url'),
+  'tooltip' => 'URL to the blockexplorer website for your blockchain. Will append the blockhash to the URL. Leave empty to disabled this.'
 );
-$aSettings['website'][] = array(
+$aSettings['blockchain'][] = array(
+  'display' => 'Disable Transactionexplorer', 'type' => 'select',
+  'options' => array( 0 => 'No', 1 => 'Yes' ),
+  'default' => 0,
+  'name' => 'website_transactionexplorer_disabled', 'value' => $setting->getValue('website_transactionexplorer_disabled'),
+  'tooltip' => 'Enabled or disable the transactionexplorer URL feature. Will remove any links using the transactionexplorer URL.'
+);
+$aSettings['blockchain'][] = array(
+  'display' => 'Transactionexplorer URL', 'type' => 'text',
+  'size' => 50,
+  'default' => 'http://explorer.litecoin.net/tx/',
+  'name' => 'website_transactionexplorer_url', 'value' => $setting->getValue('website_transactionexplorer_url'),
+  'tooltip' => 'URL to the transactionexplorer website for your blockchain. Will append the transactionid to the URL. Leave empty to disabled this.'
+);
+$aSettings['blockchain'][] = array(
   'display' => 'Disable Chaininfo', 'type' => 'select',
   'options' => array( 0 => 'No', 1 => 'Yes' ),
   'default' => 0,
   'name' => 'website_chaininfo_disabled', 'value' => $setting->getValue('website_chaininfo_disabled'),
   'tooltip' => 'Enabled or disable the chainfo URL feature. Will remove any links using the chaininfo URL.'
+);
+$aSettings['blockchain'][] = array(
+  'display' => 'Chaininfo URL', 'type' => 'text',
+  'size' => 50,
+  'default' => 'http://allchains.info',
+  'name' => 'website_chaininfo_url', 'value' => $setting->getValue('website_chaininfo_url'),
+  'tooltip' => 'URL to the chaininfo website for your blockchain. Leave empty to disabled this.'
 );
 $aSettings['wallet'][] = array(
   'display' => 'Cold Coins', 'type' => 'text',
@@ -110,8 +119,15 @@ $aSettings['statistics'][] = array(
   'tooltip' => 'How often to refresh data via ajax in seconds.'
 );
 $aSettings['statistics'][] = array(
+  'display' => 'Ajax Long Refresh Interval', 'type' => 'select',
+  'options' => array('5' => '5', '10' => '10', '15' => '15', '30' => '30', '60' => '60', '600' => '600', '1800' => '1800', '3600' => '3600' ),
+  'default' => 10,
+  'name' => 'statistics_ajax_long_refresh_interval', 'value' => $setting->getValue('statistics_ajax_long_refresh_interval'),
+  'tooltip' => 'How often to refresh data via ajax in seconds. User for SQL costly queries like getBalance and getWorkers.'
+);
+$aSettings['statistics'][] = array(
   'display' => 'Ajax Data Interval', 'type' => 'select',
-  'options' => array('60' => '1', '300' => '5', '600' => '10'),
+  'options' => array('60' => '1', '180' => '3', '300' => '5', '600' => '10'),
   'default' => 300,
   'name' => 'statistics_ajax_data_interval', 'value' => $setting->getValue('statistics_ajax_data_interval'),
   'tooltip' => 'Time in minutes, interval for hashrate and sharerate calculations. Higher intervals allow for better accuracy at a higer server load.'
@@ -237,18 +253,25 @@ $aSettings['system'][] = array(
   'tooltip' => 'Enable or Disable invitations. Users will not be able to invite new users via email if disabled.'
 );
 $aSettings['system'][] = array(
+  'display' => 'Disable Payout Cron', 'type' => 'select',
+  'options' => array( 0 => 'No', 1 => 'Yes' ),
+  'default' => 0,
+  'name' => 'disable_payouts', 'value' => $setting->getValue('disable_payouts'),
+  'tooltip' => 'Enable or Disable the payout cronjob. Users will not be able to withdraw any funds if disabled. Will be logged in monitoring page.'
+);
+$aSettings['system'][] = array(
   'display' => 'Disable Manual Payouts', 'type' => 'select',
   'options' => array( 0 => 'No', 1 => 'Yes' ),
   'default' => 0,
-  'name' => 'disable_mp', 'value' => $setting->getValue('disable_mp'),
-  'tooltip' => 'Enable or Disable the manual payout processing. Users will not be able to withdraw any funds if disabled.'
+  'name' => 'disable_manual_payouts', 'value' => $setting->getValue('disable_manual_payouts'),
+  'tooltip' => 'Enable or Disable manual payouts. Users will not be able to withdraw any funds manually if disabled. Will NOT be logged in monitoring page.'
 );
 $aSettings['system'][] = array(
-  'display' => 'Disable Automatic Payouts', 'type' => 'select',
+  'display' => 'Disable Auto Payout', 'type' => 'select',
   'options' => array( 0 => 'No', 1 => 'Yes' ),
   'default' => 0,
-  'name' => 'disable_ap', 'value' => $setting->getValue('disable_ap'),
-  'tooltip' => 'Enable or Disable the automatic payout processing. Users exceeding their thresholds will not be paid out if disabled.'
+  'name' => 'disable_auto_payouts', 'value' => $setting->getValue('disable_auto_payouts'),
+  'tooltip' => 'Enable or Disable the payout cronjob. Users will not be able to withdraw any funds automatically if disabled. Will NOT be logged in monitoring page.'
 );
 $aSettings['system'][] = array(
   'display' => 'Disable notifications', 'type' => 'select',
@@ -270,6 +293,13 @@ $aSettings['system'][] = array(
   'default' => 0,
   'name' => 'disable_contactform', 'value' => $setting->getValue('disable_contactform'),
   'tooltip' => 'Enable or Disable Contactform. Users will not be able to use the contact form.'
+);
+$aSettings['system'][] = array(
+  'display' => 'Disable Contactform for Guests', 'type' => 'select',
+  'options' => array( 0 => 'No', 1 => 'Yes' ),
+  'default' => 0,
+  'name' => 'disable_contactform_guest', 'value' => $setting->getValue('disable_contactform_guest'),
+  'tooltip' => 'Enable or Disable Contactform for guests. Guests will not be able to use the contact form.'
 );
 $aSettings['system'][] = array(
   'display' => 'Disable Donors Page', 'type' => 'select',
@@ -298,6 +328,27 @@ $aSettings['system'][] = array(
   'default' => 0,
   'name' => 'disable_dashboard_api', 'value' => $setting->getValue('disable_dashboard_api'),
   'tooltip' => 'Disable dashboard API entirely to reduce server load.'
+);
+$aSettings['system'][] = array(
+  'display' => 'Disable Live Navbar', 'type' => 'select',
+  'options' => array( 0 => 'No', 1 => 'Yes'),
+  'default' => 0,
+  'name' => 'disable_navbar', 'value' => $setting->getValue('disable_navbar'),
+  'tooltip' => 'Disable live updates on the navbar to reduce server load.'
+);
+$aSettings['system'][] = array(
+  'display' => 'Disable Navbar API', 'type' => 'select',
+  'options' => array( 0 => 'No', 1 => 'Yes'),
+  'default' => 0,
+  'name' => 'disable_navbar_api', 'value' => $setting->getValue('disable_navbar_api'),
+  'tooltip' => 'Disable navbar API entirely to reduce server load. Used in pool stats and navbar mini stats.'
+);
+$aSettings['system'][] = array(
+  'display' => 'Disable TX Summaries', 'type' => 'select',
+  'options' => array( 0 => 'No', 1 => 'Yes'),
+  'default' => 0,
+  'name' => 'disable_transactionsummary', 'value' => $setting->getValue('disable_transactionsummary'),
+  'tooltip' => 'Disable transaction summaries. Helpful with large transaction tables.'
 );
 $aSettings['recaptcha'][] = array(
   'display' => 'Enable re-Captcha', 'type' => 'select',
@@ -328,4 +379,3 @@ $aSettings['monitoring'][] = array(
   'tooltip' => 'Create per-monitor API keys and save them here to propagate your uptime statistics.'
 );
 
-?>

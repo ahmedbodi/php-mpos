@@ -35,7 +35,7 @@ if ( ! $dPersonalHashrateModifier = $setting->getValue('statistics_personal_hash
 if ( ! $dNetworkHashrateModifier = $setting->getValue('statistics_network_hashrate_modifier') ) $dNetworkHashrateModifier = 1;
 
 // Apply modifier now
-$dNetworkHashrate = $dNetworkHashrate * $dNetworkHashrateModifier;
+$dNetworkHashrate = $dNetworkHashrate / 1000 * $dNetworkHashrateModifier;
 $iCurrentPoolHashrate = $iCurrentPoolHashrate * $dPoolHashrateModifier;
 
 // Share rate of the entire pool
@@ -46,6 +46,7 @@ if (!$iCurrentActiveWorkers = $worker->getCountAllActiveWorkers()) $iCurrentActi
 
 // Some settings to propagate to template
 if (! $statistics_ajax_refresh_interval = $setting->getValue('statistics_ajax_refresh_interval')) $statistics_ajax_refresh_interval = 10;
+if (! $statistics_ajax_long_refresh_interval = $setting->getValue('statistics_ajax_long_refresh_interval')) $statistics_ajax_long_refresh_interval = 10;
 
 // Small helper array
 $aHashunits = array( '1' => 'KH/s', '0.001' => 'MH/s', '0.000001' => 'GH/s' );
@@ -63,8 +64,14 @@ $aGlobal = array(
   'confirmations' => $config['confirmations'],
   'reward' => $config['reward'],
   'price' => $setting->getValue('price'),
-  'disable_mp' => $setting->getValue('disable_mp'),
   'config' => array(
+    'disable_navbar' => $setting->getValue('disable_navbar'),
+    'disable_navbar_api' => $setting->getValue('disable_navbar_api'),
+    'disable_payouts' => $setting->getValue('disable_payouts'),
+    'disable_manual_payouts' => $setting->getValue('disable_manual_payouts'),
+    'disable_auto_payouts' => $setting->getValue('disable_auto_payouts'),
+    'disable_contactform' => $setting->getValue('disable_contactform'),
+    'disable_contactform_guest' => $setting->getValue('disable_contactform_guest'),
     'algorithm' => $config['algorithm'],
     'target_bits' => $config['target_bits'],
     'accounts' => $config['accounts'],
@@ -72,6 +79,7 @@ $aGlobal = array(
     'disable_notifications' => $setting->getValue('disable_notifications'),
     'monitoring_uptimerobot_api_keys' => $setting->getValue('monitoring_uptimerobot_api_keys'),
     'statistics_ajax_refresh_interval' => $statistics_ajax_refresh_interval,
+    'statistics_ajax_long_refresh_interval' => $statistics_ajax_long_refresh_interval,
     'price' => array( 'currency' => $config['price']['currency'] ),
     'targetdiff' => $config['difficulty'],
     'currency' => $config['currency'],
@@ -91,10 +99,12 @@ $aGlobal['website']['slogan'] = $setting->getValue('website_slogan');
 $aGlobal['website']['email'] = $setting->getValue('website_email');
 $aGlobal['website']['api']['disabled'] = $setting->getValue('disable_api');
 $aGlobal['website']['blockexplorer']['disabled'] = $setting->getValue('website_blockexplorer_disabled');
+$aGlobal['website']['transactionexplorer']['disabled'] = $setting->getValue('website_transactionexplorer_disabled');
 $aGlobal['website']['chaininfo']['disabled'] = $setting->getValue('website_chaininfo_disabled');
 $aGlobal['website']['donors']['disabled'] = $setting->getValue('disable_donors');
 $aGlobal['website']['about']['disabled'] = $setting->getValue('disable_about');
 $setting->getValue('website_blockexplorer_url') ? $aGlobal['website']['blockexplorer']['url'] = $setting->getValue('website_blockexplorer_url') : $aGlobal['website']['blockexplorer']['url'] = 'http://explorer.litecoin.net/block/';
+$setting->getValue('website_transactionexplorer_url') ? $aGlobal['website']['transactionexplorer']['url'] = $setting->getValue('website_transactionexplorer_url') : $aGlobal['website']['transactionexplorer']['url'] = 'http://explorer.litecoin.net/tx/';
 $setting->getValue('website_chaininfo_url') ? $aGlobal['website']['chaininfo']['url'] = $setting->getValue('website_chaininfo_url') : $aGlobal['website']['chaininfo']['url'] = 'http://allchains.info';
 
 // Google Analytics
@@ -136,24 +146,8 @@ if (@$_SESSION['USERDATA']['id']) {
     $aGlobal['userdata']['estimates'] = $aEstimates;
     break;
   case 'pps':
-    // We support some dynamic reward targets but fall back to our fixed value
-    // Special calculations for PPS Values based on reward_type setting and/or available blocks
-    if ($config['pps']['reward']['type'] == 'blockavg' && $block->getBlockCount() > 0) {
-      $pps_reward = round($block->getAvgBlockReward($config['pps']['blockavg']['blockcount']));
-    } else {
-      if ($config['pps']['reward']['type'] == 'block') {
-        if ($aLastBlock = $block->getLast()) {
-          $pps_reward = $aLastBlock['amount'];
-        } else {
-          $pps_reward = $config['pps']['reward']['default'];
-        }
-      } else {
-        $pps_reward = $config['pps']['reward']['default'];
-      }
-    }
-
     $aGlobal['userdata']['pps']['unpaidshares'] = $statistics->getUserUnpaidPPSShares($_SESSION['USERDATA']['id'], $setting->getValue('pps_last_share_id'));
-    $aGlobal['ppsvalue'] = number_format(round($pps_reward / (pow(2, $config['target_bits']) * $dDifficulty), 12) ,12);
+    $aGlobal['ppsvalue'] = number_format($statistics->getPPSValue(), 12);
     $aGlobal['poolppsvalue'] = $aGlobal['ppsvalue'] * pow(2, $config['difficulty'] - 16);
     $aGlobal['userdata']['sharedifficulty'] = $statistics->getUserShareDifficulty($_SESSION['USERDATA']['id']);
     $aGlobal['userdata']['estimates'] = $statistics->getUserEstimates($aGlobal['userdata']['sharerate'], $aGlobal['userdata']['sharedifficulty'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees'], $aGlobal['ppsvalue']);

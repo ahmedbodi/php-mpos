@@ -8,8 +8,8 @@
 <script type="text/javascript" src="{$PATH}/js/plugins/jqplot.canvasTextRenderer.min.js"></script>
 <script type="text/javascript" src="{$PATH}/js/plugins/jqplot.canvasAxisTickRenderer.min.js"></script>
 <script type="text/javascript" src="{$PATH}/js/plugins/jqplot.categoryAxisRenderer.min.js"></script>
-<script type="text/javascript" src="{$PATH}/js/plugins/jqplot.barRenderer.min.js"></script>
 <script type="text/javascript" src="{$PATH}/js/plugins/jqplot.pointLabels.js"></script>
+<script type="text/javascript" src="{$PATH}/js/plugins/jqplot.donutRenderer.js"></script>
 
 <script>
 {literal}
@@ -17,7 +17,9 @@ $(document).ready(function(){
   var g1, g2, g3, g4, g5;
 
   // Ajax API URL
-  var url = "{/literal}{$smarty.server.PHP_SELF}?page=api&action=getdashboarddata&api_key={$GLOBAL.userdata.api_key}&id={$GLOBAL.userdata.id}{literal}";
+  var url_dashboard = "{/literal}{$smarty.server.PHP_SELF}?page=api&action=getdashboarddata&api_key={$GLOBAL.userdata.api_key}&id={$GLOBAL.userdata.id}{literal}";
+  var url_worker = "{/literal}{$smarty.server.PHP_SELF}?page=api&action=getuserworkers&api_key={$GLOBAL.userdata.api_key}&id={$GLOBAL.userdata.id}{literal}";
+  var url_balance = "{/literal}{$smarty.server.PHP_SELF}?page=api&action=getuserbalance&api_key={$GLOBAL.userdata.api_key}&id={$GLOBAL.userdata.id}{literal}";
 
   // Enable all included plugins
   //  $.jqplot.config.enablePlugins = true;
@@ -49,7 +51,7 @@ $(document).ready(function(){
     axes: {
       yaxis:  { min: 0, pad: 1.25, label: 'Hashrate' , labelRenderer: $.jqplot.CanvasAxisLabelRenderer },
       y3axis: { min: 0, pad: 1.25, label: 'Sharerate', labelRenderer: $.jqplot.CanvasAxisLabelRenderer },
-      xaxis:  { tickInterval: {/literal}{$GLOBAL.config.statistics_ajax_refresh_interval}{literal}, labelRenderer: $.jqplot.CanvasAxisLabelRenderer, renderer: $.jqplot.DateAxisRenderer, angle: 30, tickOptions: { formatString: '%T' } },
+      xaxis:  { showTicks: false, tickInterval: {/literal}{$GLOBAL.config.statistics_ajax_refresh_interval}{literal}, labelRenderer: $.jqplot.CanvasAxisLabelRenderer, renderer: $.jqplot.DateAxisRenderer, angle: 30, tickOptions: { formatString: '%T' } },
     },
   };
 
@@ -59,34 +61,25 @@ $(document).ready(function(){
     grid: { drawBorder: false, background: '#fbfbfb', shadow: false },
     seriesColors: [ '#26a4ed', '#ee8310', '#e9e744' ],
     seriesDefaults: {
-      pointLabels: { show: true },
-      renderer: $.jqplot.BarRenderer,
-      shadowAngle: 135,
-      rendererOptions: {
-        barWidth: 5,
-        barDirection: 'horizontal'
-      },
-      trendline: { show: false },
+      renderer: $.jqplot.DonutRenderer,
+      rendererOptions:{
+        ringMargin: 10,
+        sliceMargin: 10,
+        startAngle: -90,
+        showDataLabels: true,
+        dataLabels: 'value',
+        dataLabelThreshold: 0
+      }
     },
-    axesDefaults: {
-        autoscale: true,
-        tickRenderer: $.jqplot.CanvasAxisTickRenderer ,
-    },
-    series: [
-      {label: 'Own', }, {label: 'Pool'}
-    ],
-    legend: { show: true, location: 'ne', renderer: $.jqplot.EnhancedLegendRenderer, rendererOptions: { seriesToggleReplot: { resetAxes: true } } },
-    axes: {
-      yaxis: { tickOptions: { angle: -90 }, ticks:  [ 'valid', 'invalid' ], renderer: $.jqplot.CategoryAxisRenderer },
-      xaxis: { tickOptions: { angle: -17 }, pointLabels: { show: true } }
-    }
+    legend: { show: false }
   };
-
-  // Init empty graph with 0 data, otherwise some plugins fail
 
   // Initilize gauges and graph
   var plot1 = $.jqplot('hashrategraph', [[storedPersonalHashrate], [storedPoolHashrate], [[0, 0.0]]], jqPlotOverviewOptions);
-  var plot2 = $.jqplot('shareinfograph', [[{/literal}{$GLOBAL.userdata.shares.valid}{literal},{/literal}{$GLOBAL.userdata.shares.invalid}{literal}],[{/literal}{$GLOBAL.roundshares.valid}{literal},{/literal}{$GLOBAL.roundshares.invalid}{literal}]], jqPlotShareinfoOptions);
+  var plot2 = $.jqplot('shareinfograph', [
+      [['your valid', {/literal}{$GLOBAL.userdata.shares.valid}{literal}], ['pool valid', {/literal}{$GLOBAL.roundshares.valid}{literal}]],
+      [['your invalid', {/literal}{$GLOBAL.userdata.shares.invalid}{literal}], ['pool invalid', {/literal}{$GLOBAL.roundshares.invalid}{literal}]]
+    ], jqPlotShareinfoOptions);
 
   g1 = new JustGage({id: "nethashrate", value: parseFloat({/literal}{$GLOBAL.nethashrate}{literal}).toFixed(2), min: 0, max: Math.round({/literal}{$GLOBAL.nethashrate}{literal} * 2), title: "Net Hashrate", gaugeColor: '#6f7a8a', valueFontColor: '#555', shadowOpacity : 0.8, shadowSize : 0, shadowVerticalOffset : 10, label: "{/literal}{$GLOBAL.hashunits.network}{literal}"});
   g2 = new JustGage({id: "poolhashrate", value: parseFloat({/literal}{$GLOBAL.hashrate}{literal}).toFixed(2), min: 0, max: Math.round({/literal}{$GLOBAL.hashrate}{literal}* 2), title: "Pool Hashrate", gaugeColor: '#6f7a8a', valueFontColor: '#555', shadowOpacity : 0.8, shadowSize : 0, shadowVerticalOffset : 10, label: "{/literal}{$GLOBAL.hashunits.pool}{literal}"});
@@ -114,8 +107,8 @@ $(document).ready(function(){
     storedPersonalSharerate[storedPersonalSharerate.length] = [timeNow, parseFloat(data.getdashboarddata.data.personal.sharerate)];
     storedPoolHashrate[storedPoolHashrate.length] = [timeNow, data.getdashboarddata.data.raw.pool.hashrate];
     tempShareinfoData = [
-        [parseInt(data.getdashboarddata.data.personal.shares.valid), parseInt(data.getdashboarddata.data.personal.shares.invalid)],
-        [parseInt(data.getdashboarddata.data.pool.shares.valid), parseInt(data.getdashboarddata.data.pool.shares.invalid)]
+        [['your valid', parseInt(data.getdashboarddata.data.personal.shares.valid)], ['pool valid', parseInt(data.getdashboarddata.data.pool.shares.valid)]],
+        [['your invalid', parseInt(data.getdashboarddata.data.personal.shares.invalid)], ['pool invalid', parseInt(data.getdashboarddata.data.pool.shares.invalid)]]
     ];
     replotOverviewOptions = {
       data: [storedPersonalHashrate, storedPoolHashrate, storedPersonalSharerate],
@@ -128,9 +121,15 @@ $(document).ready(function(){
     if (typeof(plot2) != "undefined") plot2.replot(replotShareinfoOptions);
   }
 
+  // Refresh balance information
+  function refreshBalanceData(data) {
+    balance = data.getuserbalance.data
+    $('#b-confirmed').html(balance.confirmed);
+    $('#b-unconfirmed').html(balance.unconfirmed);
+  }
+
+  // Refresh other static numbers on the template
   function refreshStaticData(data) {
-    $('#b-confirmed').html(data.getdashboarddata.data.personal.balance.confirmed);
-    $('#b-unconfirmed').html(data.getdashboarddata.data.personal.balance.unconfirmed);
     $('#b-price').html((parseFloat(data.getdashboarddata.data.pool.price).toFixed(8)));
     $('#b-dworkers').html(data.getdashboarddata.data.pool.workers);
     $('#b-hashrate').html((parseFloat(data.getdashboarddata.data.personal.hashrate).toFixed(2)));
@@ -140,13 +139,15 @@ $(document).ready(function(){
     $('#b-pvalid').html(data.getdashboarddata.data.pool.shares.valid);
     $('#b-pivalid').html(data.getdashboarddata.data.pool.shares.invalid + " (" + data.getdashboarddata.data.pool.shares.invalid_percent + "%)" );
     $('#b-diff').html(data.getdashboarddata.data.network.difficulty);
+    $('#b-nextdiff').html(data.getdashboarddata.data.network.nextdifficulty + " (Change in " + data.getdashboarddata.data.network.blocksuntildiffchange + " Blocks)");
+    $('#b-esttimeperblock').html(data.getdashboarddata.data.network.esttimeperblock + " seconds"); // <- this needs some nicer format
     $('#b-nblock').html(data.getdashboarddata.data.network.block);
     $('#b-target').html(data.getdashboarddata.data.pool.shares.estimated + " (done: " + data.getdashboarddata.data.pool.shares.progress + "%)" );
     {/literal}{if $GLOBAL.config.payout_system != 'pps'}{literal }
-    $('#b-payout').html((parseFloat(data.getdashboarddata.data.personal.estimates.payout).toFixed(4)));
-    $('#b-block').html((parseFloat(data.getdashboarddata.data.personal.estimates.block).toFixed(4)));
-    $('#b-fee').html((parseFloat(data.getdashboarddata.data.personal.estimates.fee).toFixed(4)));
-    $('#b-donation').html((parseFloat(data.getdashboarddata.data.personal.estimates.donation).toFixed(4)));
+    $('#b-payout').html((parseFloat(data.getdashboarddata.data.personal.estimates.payout).toFixed(8)));
+    $('#b-block').html((parseFloat(data.getdashboarddata.data.personal.estimates.block).toFixed(8)));
+    $('#b-fee').html((parseFloat(data.getdashboarddata.data.personal.estimates.fee).toFixed(8)));
+    $('#b-donation').html((parseFloat(data.getdashboarddata.data.personal.estimates.donation).toFixed(8)));
 {/literal}{else}{literal}
     $('#b-ppsunpaid').html((parseFloat(data.getdashboarddata.data.personal.shares.unpaid).toFixed(0)));
     $('#b-ppsdiff').html((parseFloat(data.getdashboarddata.data.personal.sharedifficulty).toFixed(2)));
@@ -163,8 +164,7 @@ $(document).ready(function(){
 
   // Refresh worker information
   function refreshWorkerData(data) {
-    data = data.getdashboarddata.data;
-    workers = data.personal.workers;
+    workers = data.getuserworkers.data;
     length = workers.length;
     $('#b-workers').html('');
     for (var i = j = 0; i < length; i++) {
@@ -177,17 +177,44 @@ $(document).ready(function(){
   }
 
   // Our worker process to keep gauges and graph updated
-  (function worker() {
+  (function worker1() {
     $.ajax({
-      url: url,
+      url: url_dashboard,
       dataType: 'json',
       success: function(data) {
         refreshInformation(data);
         refreshStaticData(data);
+      },
+      complete: function() {
+        setTimeout(worker1, {/literal}{($GLOBAL.config.statistics_ajax_refresh_interval * 1000)|default:"10000"}{literal})
+      }
+    });
+  })();
+
+  // Our worker process to keep worker information updated
+  (function worker3() {
+    $.ajax({
+      url: url_balance,
+      dataType: 'json',
+      success: function(data) {
+        refreshBalanceData(data);
+      },
+      complete: function() {
+        setTimeout(worker3, {/literal}{($GLOBAL.config.statistics_ajax_long_refresh_interval * 1000)|default:"10000"}{literal})
+      }
+    });
+  })();
+
+  // Our worker process to keep gauges and graph updated
+  (function worker2() {
+    $.ajax({
+      url: url_worker,
+      dataType: 'json',
+      success: function(data) {
         refreshWorkerData(data);
       },
       complete: function() {
-        setTimeout(worker, {/literal}{($GLOBAL.config.statistics_ajax_refresh_interval * 1000)|default:"10000"}{literal})
+        setTimeout(worker2, {/literal}{($GLOBAL.config.statistics_ajax_long_refresh_interval * 1000)|default:"10000"}{literal})
       }
     });
   })();

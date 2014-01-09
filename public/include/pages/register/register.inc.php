@@ -8,8 +8,8 @@ if ($setting->getValue('recaptcha_enabled')) {
   $rsp = recaptcha_check_answer (
     $setting->getValue('recaptcha_private_key'),
     $_SERVER["REMOTE_ADDR"],
-    $_POST["recaptcha_challenge_field"],
-    $_POST["recaptcha_response_field"]
+    ( (isset($_POST["recaptcha_challenge_field"])) ? $_POST["recaptcha_challenge_field"] : null ),
+    ( (isset($_POST["recaptcha_response_field"])) ? $_POST["recaptcha_response_field"] : null )
   );
 }
 
@@ -19,11 +19,11 @@ if ($setting->getValue('disable_invitations') && $setting->getValue('lock_regist
   $_SESSION['POPUP'][] = array('CONTENT' => 'Only invited users are allowed to register.', 'TYPE' => 'errormsg');
 } else {
   // Check if recaptcha is enabled, process form data if valid
-  if($setting->getValue('recaptcha_enabled') && $_POST["recaptcha_response_field"] && $_POST["recaptcha_response_field"]!=''){
+  if($setting->getValue('recaptcha_enabled') && isset($_POST["recaptcha_response_field"]) && $_POST["recaptcha_response_field"]!=''){
     if ($rsp->is_valid) {
       $smarty->assign("RECAPTCHA", recaptcha_get_html($setting->getValue('recaptcha_public_key')));
       isset($_POST['token']) ? $token = $_POST['token'] : $token = '';
-      if ($user->register(@$_POST['username'], @$_POST['password1'], @$_POST['password2'], @$_POST['pin'], @$_POST['email1'], @$_POST['email2'], $token)) {
+      if ($user->register(@$_POST['username'], @$_POST['password1'], @$_POST['password2'], @$_POST['pin'], @$_POST['email1'], @$_POST['email2'], @$_POST['tac'], $token)) {
         ! $setting->getValue('accounts_confirm_email_disabled') ? $_SESSION['POPUP'][] = array('CONTENT' => 'Please check your mailbox to activate this account') : $_SESSION['POPUP'][] = array('CONTENT' => 'Account created, please login');
       } else {
         $_SESSION['POPUP'][] = array('CONTENT' => 'Unable to create account: ' . $user->getError(), 'TYPE' => 'errormsg');
@@ -39,7 +39,7 @@ if ($setting->getValue('disable_invitations') && $setting->getValue('lock_regist
     // Captcha disabled
   } else {
     isset($_POST['token']) ? $token = $_POST['token'] : $token = '';
-    if ($user->register(@$_POST['username'], @$_POST['password1'], @$_POST['password2'], @$_POST['pin'], @$_POST['email1'], @$_POST['email2'], $token)) {
+    if ($user->register(@$_POST['username'], @$_POST['password1'], @$_POST['password2'], @$_POST['pin'], @$_POST['email1'], @$_POST['email2'], @$_POST['tac'], $token)) {
       ! $setting->getValue('accounts_confirm_email_disabled') ? $_SESSION['POPUP'][] = array('CONTENT' => 'Please check your mailbox to activate this account') : $_SESSION['POPUP'][] = array('CONTENT' => 'Account created, please login');
     } else {
       $_SESSION['POPUP'][] = array('CONTENT' => 'Unable to create account: ' . $user->getError(), 'TYPE' => 'errormsg');

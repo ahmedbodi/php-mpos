@@ -34,7 +34,7 @@ if (!$strLastBlockHash) $strLastBlockHash = '';
 if ( $bitcoin->can_connect() === true ){
   $aTransactions = $bitcoin->query('listsinceblock', $strLastBlockHash);
 } else {
-  $log->logFatal('Unable to conenct to RPC server backend');
+  $log->logFatal('Unable to connect to RPC server backend');
   $monitoring->endCronjob($cron_name, 'E0006', 1, true);
 }
 
@@ -95,7 +95,7 @@ if (empty($aAllBlocks)) {
           // Fetch our offending block
           $aBlockError = $block->getBlockByShareId($iPreviousShareId);
           $log->logError('E0001: The block with height ' . $aBlock['height'] . ' found share ' . $iCurrentUpstreamId . ' which is < than ' . $iPreviousShareId . ' of block ' . $aBlockError['height'] . '.');
-          if ( !$aShareError = $share->getShareById($aBlockError['share_id']) || !$aShareCurrent = $share->getShareById($iCurrentUpstreamId)) {
+          if ( !($aShareError = $share->getShareById($aBlockError['share_id'])) || !($aShareCurrent = $share->getShareById($iCurrentUpstreamId))) {
             // We were not able to fetch all shares that were causing this detection to trigger, bail out
             $log->logFatal('E0002: Failed to fetch both offending shares ' . $iCurrentUpstreamId . ' and ' . $iPreviousShareId . '. Block height: ' . $aBlock['height']);
             $monitoring->endCronjob($cron_name, 'E0002', 1, true);
@@ -137,13 +137,13 @@ if (empty($aAllBlocks)) {
       // Store new information
       if (!$block->setShareId($aBlock['id'], $iCurrentUpstreamId))
         $log->logError('Failed to update share ID in database for block ' . $aBlock['height'] . ': ' . $block->getCronError());
-      if (!$block->setFinder($aBlock['id'], $iAccountId))
+      if (!empty($iAccountId) && !$block->setFinder($aBlock['id'], $iAccountId))
         $log->logError('Failed to update finder account ID in database for block ' . $aBlock['height'] . ': ' . $block->getCronError());
       if (!$block->setFindingWorker($aBlock['id'], $iWorker))
         $log->logError('Failed to update worker ID in database for block ' . $aBlock['height'] . ': ' . $block->getCronError());
       if (!$block->setShares($aBlock['id'], $iRoundShares))
         $log->logError('Failed to update share count in database for block ' . $aBlock['height'] . ': ' . $block->getCronError());
-      if ($config['block_bonus'] > 0 && !$transaction->addTransaction($iAccountId, $config['block_bonus'], 'Bonus', $aBlock['id'])) {
+      if ($config['block_bonus'] > 0 && !empty($iAccountId) && !$transaction->addTransaction($iAccountId, $config['block_bonus'], 'Bonus', $aBlock['id'])) {
         $log->logError('Failed to create Bonus transaction in database for user ' . $user->getUserName($iAccountId) . ' for block ' . $aBlock['height'] . ': ' . $transaction->getCronError());
       }
 

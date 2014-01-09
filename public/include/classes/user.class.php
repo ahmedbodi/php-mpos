@@ -46,6 +46,9 @@ class User extends Base {
   public function getUserFailed($id) {
    return $this->getSingle($id, 'failed_logins', 'id');
   }
+  public function getUserPinFailed($id) {
+   return $this->getSingle($id, 'failed_pins', 'id');
+  }
   public function isNoFee($id) {
     return $this->getUserNoFee($id);
   }
@@ -71,8 +74,16 @@ class User extends Base {
     $field = array( 'name' => 'failed_logins', 'type' => 'i', 'value' => $value);
     return $this->updateSingle($id, $field);
   }
+  public function setUserPinFailed($id, $value) {
+    $field = array( 'name' => 'failed_pins', 'type' => 'i', 'value' => $value);
+    return $this->updateSingle($id, $field);
+  }
   private function incUserFailed($id) {
     $field = array( 'name' => 'failed_logins', 'type' => 'i', 'value' => $this->getUserFailed($id) + 1);
+    return $this->updateSingle($id, $field);
+  }
+  private function incUserPinFailed($id) {
+    $field = array( 'name' => 'failed_pins', 'type' => 'i', 'value' => $this->getUserPinFailed($id) + 1);
     return $this->updateSingle($id, $field);
   }
   private function setUserIp($id, $ip) {
@@ -113,7 +124,7 @@ class User extends Base {
       }
     }
     if ($this->isLocked($this->getUserId($username))) {
-      $this->setErrorMessage("Account is locked. Please contact site support.");
+      $this->setErrorMessage('Account locked.');
       return false;
     }
     if ($this->checkUserPassword($username, $password)) {
@@ -122,8 +133,20 @@ class User extends Base {
         return true;
     }
     $this->setErrorMessage("Invalid username or password");
-    if ($id = $this->getUserId($username))
+    if ($id = $this->getUserId($username)) {
       $this->incUserFailed($id);
+      // Check if this account should be locked
+      if (isset($this->config['maxfailed']['login']) && $this->getUserFailed($id) >= $this->config['maxfailed']['login']) {
+        $this->changeLocked($id);
+        if ($token = $this->token->createToken('account_unlock', $id)) {
+          $aData['token'] = $token;
+          $aData['username'] = $username;
+          $aData['email'] = $this->getUserEmail($username);;
+          $aData['subject'] = 'Account auto-locked';
+          $this->mail->sendMail('notifications/locked', $aData);
+        }
+      }
+    }
 
     return false;
   }
@@ -139,13 +162,53 @@ class User extends Base {
     $this->debug->append("Confirming PIN for $userId and pin $pin", 2);
     $stmt = $this->mysqli->prepare("SELECT pin FROM $this->table WHERE id=? AND pin=? LIMIT 1");
     $pin_hash = $this->getHash($pin);
-    $stmt->bind_param('is', $userId, $pin_hash);
-    $stmt->execute();
-    $stmt->bind_result($row_pin);
-    $stmt->fetch();
-    $stmt->close();
-    return $pin_hash === $row_pin;
+    if ($stmt->bind_param('is', $userId, $pin_hash) && $stmt->execute() && $stmt->bind_result($row_pin) && $stmt->fetch()) {
+      $this->setUserPinFailed($userId, 0);
+      return $pin_hash === $row_pin;
+    }
+    $this->incUserPinFailed($userId);
+    // Check if this account should be locked
+    if (isset($this->config['maxfailed']['pin']) && $this->getUserPinFailed($userId) >= $this->config['maxfailed']['pin']) {
+      $this->changeLocked($userId);
+      if ($token = $this->token->createToken('account_unlock', $userId)) {
+        $username = $this->getUserName($userId);
+        $aData['token'] = $token;
+        $aData['username'] = $username;
+        $aData['email'] = $this->getUserEmail($username);;
+        $aData['subject'] = 'Account auto-locked';
+        $this->mail->sendMail('notifications/locked', $aData);
+      }
+      $this->logoutUser();
+    }
+    return false;
   }
+
+  public function generatePin($userID, $current) {
+    $this->debug->append("STA " . __METHOD__, 4);
+    $username = $this->getUserName($userID);
+    $email = $this->getUserEmail($username);
+    $current = $this->getHash($current);
+    $newpin = intval( '0' . rand(1,9) . rand(0,9) . rand(0,9) . rand(0,9) );
+    $aData['username'] = $username;
+    $aData['email'] = $email;
+    $aData['pin'] = $newpin;
+    $newpin = $this->getHash($newpin);
+    $aData['subject'] = 'PIN Reset Request';
+    $stmt = $this->mysqli->prepare("UPDATE $this->table SET pin = ? WHERE ( id = ? AND pass = ? )");
+
+    if ($this->checkStmt($stmt) && $stmt->bind_param('sis', $newpin, $userID, $current) && $stmt->execute()) {
+      if ($stmt->errno == 0 && $stmt->affected_rows === 1) {
+        if ($this->mail->sendMail('pin/reset', $aData)) {
+          return true;
+        } else {
+          $this->setErrorMessage('Unable to send mail to your address');
+          return false;
+        }
+      }
+    }
+    $this->setErrorMessage( 'Unable to generate PIN, current password incorrect?' );
+    return false;
+}
 
   /**
    * Get all users that have auto payout setup
@@ -261,22 +324,24 @@ class User extends Base {
       $this->setErrorMessage('Invalid email address');
       return false;
     }
-/*    if ($this->bitcoin->can_connect() === true && !empty($address)) {
-      try {
-        $aStatus = $this->bitcoin->validateaddress($address);
-        if (!$aStatus['isvalid']) {
-          $this->setErrorMessage('Invalid coin address');
+    if (!empty($address)) {
+      if ($this->bitcoin->can_connect() === true) {
+        try {
+          $aStatus = $this->bitcoin->validateaddress($address);
+          if (!$aStatus['isvalid']) {
+            $this->setErrorMessage('Invalid coin address');
+            return false;
+          }
+        } catch (BitcoinClientException $e) {
+          $this->setErrorMessage('Unable to verify coin address');
           return false;
         }
-      } catch (BitcoinClientException $e) {
-        $this->setErrorMessage('Unable to verify coin address');
+      } else {
+        $this->setErrorMessage('Unable to connect to RPC server for coin address validation');
         return false;
       }
-    } else {
-      $this->setErrorMessage('Unable to connect to RPC server for coin address validation');
-      return false;
     }
- */
+
     // Number sanitizer, just in case we fall through above
     $threshold = min($this->config['ap_threshold']['max'], max(0, floatval($threshold)));
     $donate = min(100, max(0, floatval($donate)));
@@ -436,8 +501,12 @@ class User extends Base {
    * @param email2 string Email confirmation
    * @return bool
    **/
-  public function register($username, $password1, $password2, $pin, $email1='', $email2='', $strToken='') {
+  public function register($username, $password1, $password2, $pin, $email1='', $email2='', $tac='', $strToken='') {
     $this->debug->append("STA " . __METHOD__, 4);
+    if ($tac != 1) {
+      $this->setErrorMessage('You need to accept our <a href="'.$_SERVER['PHP_SELF'].'?page=tac" target="_blank">Terms and Conditions</a>');
+      return false;
+    }
     if (strlen($username) > 40) {
       $this->setErrorMessage('Username exceeding character limit');
       return false;
@@ -471,7 +540,10 @@ class User extends Base {
       return false;
     }
     if (isset($strToken) && !empty($strToken)) {
-      $aToken = $this->token->getToken($strToken);
+      if ( ! $aToken = $this->token->getToken($strToken, 'invitation')) {
+        $this->setErrorMessage('Unable to find token');
+        return false;
+      }
       // Circle dependency, so we create our own object here
       $invitation = new Invitation();
       $invitation->setMysql($this->mysqli);
@@ -547,7 +619,7 @@ class User extends Base {
    **/
   public function resetPassword($token, $new1, $new2) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($aToken = $this->token->getToken($token)) {
+    if ($aToken = $this->token->getToken($token, 'password_reset')) {
       if ($new1 !== $new2) {
         $this->setErrorMessage( 'New passwords do not match' );
         return false;
@@ -568,7 +640,7 @@ class User extends Base {
         $this->setErrorMessage('Unable to set new password');
       }
     } else {
-      $this->setErrorMessage('Invalid token');
+      $this->setErrorMessage('Invalid token: ' . $this->token->getError());
     }
     $this->debug->append('Failed to update password:' . $this->mysqli->error);
     return false;
@@ -641,3 +713,4 @@ $user->setMail($mail);
 $user->setToken($oToken);
 $user->setBitcoin($bitcoin);
 $user->setSetting($setting);
+$user->setErrorCodes($aErrorCodes);

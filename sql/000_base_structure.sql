@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS `accounts` (
   `loggedIp` varchar(255) DEFAULT NULL,
   `is_locked` tinyint(1) NOT NULL DEFAULT '0',
   `failed_logins` int(5) unsigned DEFAULT '0',
+  `failed_pins` int(5) unsigned DEFAULT '0',
   `sessionTimeoutStamp` int(255) DEFAULT NULL,
   `pin` varchar(255) NOT NULL COMMENT 'four digit pin to allow account changes',
   `api_key` varchar(255) DEFAULT NULL,
@@ -127,6 +128,8 @@ CREATE TABLE IF NOT EXISTS `settings` (
   UNIQUE KEY `setting` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
+INSERT INTO `settings` (`name`, `value`) VALUES ('DB_VERSION', '0.0.1');
+
 CREATE TABLE IF NOT EXISTS `shares` (
   `id` bigint(30) NOT NULL AUTO_INCREMENT,
   `rem_host` varchar(255) NOT NULL,
@@ -156,7 +159,9 @@ CREATE TABLE IF NOT EXISTS `shares_archive` (
   `time` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `share_id` (`share_id`),
-  KEY `time` (`time`)
+  KEY `time` (`time`),
+  KEY `our_result` (`our_result`),
+  KEY `username` (`username`)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 CREATE TABLE IF NOT EXISTS `statistics_shares` (
@@ -186,14 +191,16 @@ CREATE TABLE IF NOT EXISTS `tokens` (
 CREATE TABLE IF NOT EXISTS `token_types` (
   `id` tinyint(4) unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(25) NOT NULL,
+  `expiration` INT NULL DEFAULT  '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;
 
-INSERT INTO `token_types` (`id`, `name`) VALUES
-(1, 'password_reset'),
-(2, 'confirm_email'),
-(3, 'invitation');
+INSERT INTO `token_types` (`id`, `name`, `expiration`) VALUES
+(1, 'password_reset', 3600),
+(2, 'confirm_email', 0),
+(3, 'invitation', 0),
+(4, 'account_unlock', 0);
 
 CREATE TABLE IF NOT EXISTS `transactions` (
   `id` int(255) NOT NULL AUTO_INCREMENT,
@@ -211,6 +218,14 @@ CREATE TABLE IF NOT EXISTS `transactions` (
   KEY `type` (`type`),
   KEY `archived` (`archived`)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;
+
+CREATE TABLE IF NOT EXISTS `templates` (
+  `template` varchar(255) NOT NULL,
+  `active` tinyint(1) NOT NULL DEFAULT 0,
+  `content` mediumtext,
+  `modified_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`template`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;

@@ -4,10 +4,10 @@
     <tbody>
       <tr>
         <td align="left">
-          <a href="{$smarty.server.PHP_SELF}?page={$smarty.request.page}&action={$smarty.request.action}&height={$BLOCKDETAILS.height}&prev=1"><i class="icon-left-open"></i></a>
+          <a href="{$smarty.server.PHP_SELF}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&height={$BLOCKDETAILS.height}&prev=1"><i class="icon-left-open"></i></a>
         </td>
         <td align="right" colspan="4">
-          <a href="{$smarty.server.PHP_SELF}?page={$smarty.request.page}&action={$smarty.request.action}&height={$BLOCKDETAILS.height}&next=1"><i class="icon-right-open"></i></a>
+          <a href="{$smarty.server.PHP_SELF}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&height={$BLOCKDETAILS.height}&next=1"><i class="icon-right-open"></i></a>
         </td>
       </tr>
     </tbody>
@@ -63,7 +63,7 @@
         <td>Shares</td>
         <td>{$BLOCKDETAILS.shares|number_format:"0"|default:"0"}</td>
         <td>Finder</td>
-        <td>{$BLOCKDETAILS.finder|default:"0"}</td>
+        <td>{$BLOCKDETAILS.finder|default:"unknown"}</td>
         <td>Seconds This Round</td>
         <td>{$BLOCKDETAILS.round_time|number_format:"0"|default:"0"}</td>
         <td>Round Variance</td>
