@@ -75,7 +75,8 @@ $config['wallet']['type'] = 'http';
 $config['wallet']['host'] = 'localhost:19334';
 $config['wallet']['username'] = 'testnet';
 $config['wallet']['password'] = 'testnet';
-
+$config['coldwallet']['address'] = '';
+$config['coldwallet']['threshold'] = 0;
 /**
  * Lock account after maximum failed logins
  *
