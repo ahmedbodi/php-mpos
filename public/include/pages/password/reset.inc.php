@@ -1,13 +1,15 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 // Process password reset request
-if ($user->initResetPassword($_POST['username'], $smarty)) {
-  $_SESSION['POPUP'][] = array('CONTENT' => 'Please check your mail account to finish your password reset');
+if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
+  if ($user->initResetPassword($_POST['username'], $smarty)) {
+    $_SESSION['POPUP'][] = array('CONTENT' => 'Please check your mail account to finish your password reset', 'TYPE' => 'success');
+  } else {
+    $_SESSION['POPUP'][] = array('CONTENT' => htmlentities($user->getError(), ENT_QUOTES), 'TYPE' => 'errormsg');
+  }
 } else {
-  $_SESSION['POPUP'][] = array('CONTENT' => htmlentities($user->getError(), ENT_QUOTES), 'TYPE' => 'errormsg');
+  $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
 }
 
 // Tempalte specifics, user default template by parent page

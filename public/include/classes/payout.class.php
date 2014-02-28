@@ -1,7 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 class Payout Extends Base {
   protected $table = 'payouts';
@@ -19,26 +17,32 @@ class Payout Extends Base {
   }
 
   /**
-   * Get all new, unprocessed payout requests
-   * @param none
-   * @return data Associative array with DB Fields
-   **/
-  public function getUnprocessedPayouts() {
-    $stmt = $this->mysqli->prepare("SELECT * FROM $this->table WHERE completed = 0");
-    if ($this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result())
-      return $result->fetch_all(MYSQLI_ASSOC);
-    return $this->sqlError('E0050');
-  }
-
-  /**
    * Insert a new payout request
-   * @param account_id Account ID
+   * @param account_id int Account ID
+   * @param strToken string Token to confirm
    * @return data mixed Inserted ID or false
    **/
-  public function createPayout($account_id=NULL) {
+  public function createPayout($account_id=NULL, $strToken) {
     $stmt = $this->mysqli->prepare("INSERT INTO $this->table (account_id) VALUES (?)");
     if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
-      return $stmt->insert_id;
+      $insert_id = $stmt->insert_id;
+      // twofactor - consume the token if it is enabled and valid
+      if ($this->config['twofactor']['enabled'] && $this->config['twofactor']['options']['withdraw']) {
+        $tValid = $this->token->isTokenValid($account_id, $strToken, 7);
+        if ($tValid) {
+          $delete = $this->token->deleteToken($strToken);
+          if (!$delete) {
+            $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
+            $this->setErrorMessage('Unable to delete token');
+            return false;
+          }
+        } else {
+          $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
+          $this->setErrorMessage('Invalid token');
+          return false;
+        }
+      }
+      return $insert_id;
     }
     return $this->sqlError('E0049');
   }
@@ -49,7 +53,7 @@ class Payout Extends Base {
    * @return boolean bool True or False
    **/
   public function setProcessed($id) {
-    $stmt = $this->mysqli->prepare("UPDATE $this->table SET completed = 1 WHERE id = ?");
+    $stmt = $this->mysqli->prepare("UPDATE $this->table SET completed = 1 WHERE id = ? LIMIT 1");
     if ($stmt && $stmt->bind_param('i', $id) && $stmt->execute())
       return true;
     return $this->sqlError('E0051');
@@ -58,7 +62,10 @@ class Payout Extends Base {
 
 $oPayout = new Payout();
 $oPayout->setDebug($debug);
+$oPayout->setLog($log);
 $oPayout->setMysql($mysqli);
+$oPayout->setConfig($config);
+$oPayout->setToken($oToken);
 $oPayout->setErrorCodes($aErrorCodes);
 
 ?>

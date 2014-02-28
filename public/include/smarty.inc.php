@@ -1,8 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY'))
-    die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 $debug->append('Loading Smarty libraries', 2);
 define('SMARTY_DIR', INCLUDE_DIR . '/smarty/libs/');
@@ -170,6 +167,10 @@ if ($config['smarty']['cache']) {
   $smarty->setCaching(Smarty::CACHING_LIFETIME_SAVED);
   $smarty->cache_lifetime = $config['smarty']['cache_lifetime'];
   $smarty->cache_dir = BASEPATH . "templates/cache/" . THEME;
+  $smarty->escape_html = true;
   $smarty->use_sub_dirs = true;
 }
+
+// Load custom smarty plugins
+require_once(INCLUDE_DIR . '/lib/smarty_plugins/function.acl.php');
 ?>

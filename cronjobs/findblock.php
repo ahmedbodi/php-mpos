@@ -32,7 +32,7 @@ if (!$strLastBlockHash) $strLastBlockHash = '';
 
 // Fetch all transactions since our last block
 if ( $bitcoin->can_connect() === true ){
-  $aTransactions = $bitcoin->query('listsinceblock', $strLastBlockHash);
+  $aTransactions = $bitcoin->listsinceblock($strLastBlockHash);
 } else {
   $log->logFatal('Unable to connect to RPC server backend');
   $monitoring->endCronjob($cron_name, 'E0006', 1, true);
@@ -42,28 +42,31 @@ if ( $bitcoin->can_connect() === true ){
 if (empty($aTransactions['transactions'])) {
   $log->logDebug('No new RPC transactions since last block');
 } else {
-  // Table header
-  $log->logInfo("Blockhash\t\tHeight\tAmount\tConfirmations\tDiff\t\tTime");
-
+  $header = false;
   // Let us add those blocks as unaccounted
   foreach ($aTransactions['transactions'] as $iIndex => $aData) {
     if ( $aData['category'] == 'generate' || $aData['category'] == 'immature' ) {
-      $aBlockRPCInfo = $bitcoin->query('getblock', $aData['blockhash']);
+      // Table header, printe once if we found a block
+      $strLogMask = "| %-20.20s | %15.15s | %10.10s | %13.13s | %25.25s | %18.18s |";
+      // Loop through our unaccounted blocks
+      if (!$header) {
+        $log->logInfo('Starting RPC block detecion, blocks are stored in Database');
+        $log->logInfo(sprintf($strLogMask, 'Blockhash', 'Height', 'Amount', 'Confirmations', 'Difficulty', 'Time'));
+        $header = true;
+      }
+
+      $aBlockRPCInfo = $bitcoin->getblock($aData['blockhash']);
       $config['reward_type'] == 'block' ? $aData['amount'] = $aData['amount'] : $aData['amount'] = $config['reward'];
       $aData['height'] = $aBlockRPCInfo['height'];
       $aData['difficulty'] = $aBlockRPCInfo['difficulty'];
-      $log->logInfo(substr($aData['blockhash'], 0, 15) . "...\t" .
-        $aData['height'] . "\t" .
-        $aData['amount'] . "\t" .
-        $aData['confirmations'] . "\t\t" .
-        $aData['difficulty'] . "\t" .
-        strftime("%Y-%m-%d %H:%M:%S", $aData['time']));
+      $log->logInfo(sprintf($strLogMask, substr($aData['blockhash'], 0, 17)."...", $aData['height'], $aData['amount'], $aData['confirmations'], $aData['difficulty'], strftime("%Y-%m-%d %H:%M:%S", $aData['time'])));
       if ( ! empty($aBlockRPCInfo['flags']) && preg_match('/proof-of-stake/', $aBlockRPCInfo['flags']) ) {
         $log->logInfo("Block above with height " .  $aData['height'] . " not added to database, proof-of-stake block!");
         continue;
       }
       if (!$block->addBlock($aData) ) {
-        $log->logFatal('Unable to add block: ' . $aData['height'] . ': ' . $block->getCronError());
+        $log->logFatal('Unable to add block: (' . $aData['height'] . ') ' . $aData['blockhash'] . ': ' . $block->getCronError());
+        $monitoring->endCronjob($cron_name, 'E0081', 1, true);
       }
     }
   }
@@ -74,15 +77,17 @@ $aAllBlocks = $block->getAllUnsetShareId('ASC');
 if (empty($aAllBlocks)) {
   $log->logDebug('No new blocks without share_id found in database');
 } else {
+  $log->logInfo('Starting block share detection, this may take a while');
+  $strLogMask = "| %8.8s | %10.10s | %15.15s | %10.10s | %25.25s | %-15.15s | %-15.15s | %18.18s |";
   // Loop through our unaccounted blocks
-  $log->logInfo("Block ID\tHeight\t\tAmount\tShare ID\tShares\tFinder\tWorker\t\tType");
+  $log->logInfo(sprintf($strLogMask, 'Block ID', 'Height', 'Amount', 'Share ID', 'Shares', 'Finder', 'Worker', 'Type'));
   foreach ($aAllBlocks as $iIndex => $aBlock) {
     if (empty($aBlock['share_id'])) {
       // Fetch share information
       if ( !$iPreviousShareId = $block->getLastShareId())
         $iPreviousShareId = 0;
       // Fetch this blocks upstream ID
-      $aBlockRPCInfo = $bitcoin->query('getblock', $aBlock['blockhash']);
+      $aBlockRPCInfo = $bitcoin->getblock($aBlock['blockhash']);
       if ($share->findUpstreamShare($aBlockRPCInfo, $iPreviousShareId)) {
         $iCurrentUpstreamId = $share->getUpstreamShareId();
         // Rarely happens, but did happen once to me
@@ -120,19 +125,11 @@ if (empty($aAllBlocks)) {
         }
       } else {
         $log->logFatal('E0005: Unable to fetch blocks upstream share, aborted:' . $share->getCronError());
-        $monitoring->endCronjob($cron_name, 'E0005', 1, true);
+        $monitoring->endCronjob($cron_name, 'E0005', 0, true);
       }
 
-      $log->logInfo(
-        $aBlock['id'] . "\t\t"
-        . $aBlock['height'] . "\t\t"
-        . $aBlock['amount'] . "\t"
-        . $iCurrentUpstreamId . "\t\t"
-        . $iRoundShares . "\t"
-        . "[$iAccountId] " . $user->getUserName($iAccountId) . "\t"
-        . $iWorker . "\t"
-        . $share->share_type
-      );
+      // Print formatted row
+      $log->logInfo(sprintf($strLogMask, $aBlock['id'], $aBlock['height'], $aBlock['amount'], $iCurrentUpstreamId, $iRoundShares, "[$iAccountId] " . $user->getUserName($iAccountId), $iWorker, $share->share_type));
 
       // Store new information
       if (!$block->setShareId($aBlock['id'], $iCurrentUpstreamId))
@@ -147,15 +144,21 @@ if (empty($aAllBlocks)) {
         $log->logError('Failed to create Bonus transaction in database for user ' . $user->getUserName($iAccountId) . ' for block ' . $aBlock['height'] . ': ' . $transaction->getCronError());
       }
 
-      if ($setting->getValue('disable_notifications') != 1) {
+      if ($setting->getValue('disable_notifications') != 1 && $setting->getValue('notifications_disable_block') != 1) {
         // Notify users
         $aAccounts = $notification->getNotificationAccountIdByType('new_block');
         if (is_array($aAccounts)) {
+		
+          $finder = $user->getUserName($iAccountId);
           foreach ($aAccounts as $aData) {
             $aMailData['height'] = $aBlock['height'];
             $aMailData['subject'] = 'New Block';
             $aMailData['email'] = $user->getUserEmail($user->getUserName($aData['account_id']));
             $aMailData['shares'] = $iRoundShares;
+            $aMailData['amount'] = $aBlock['amount'];
+            $aMailData['difficulty'] = $aBlock['difficulty'];
+            $aMailData['finder'] = $finder;
+            $aMailData['currency'] = $config['currency'];
             if (!$notification->sendNotification($aData['account_id'], 'new_block', $aMailData))
               $log->logError('Failed to notify user of new found block: ' . $user->getUserName($aData['account_id']));
           }

@@ -1,7 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 class Monitoring extends Base {
    protected $table = 'monitoring';
@@ -93,6 +91,21 @@ class Monitoring extends Base {
       return true;
     $this->debug->append("Failed to set $name to $value");
     return false;
+  }
+
+  /**
+   * Start a cronjob, mark various fields properly
+   * @param cron_name string Cronjob name
+   **/
+  public function startCronjob($cron_name) {
+    $aStatus = $this->getStatus($cron_name . '_active');
+    if ($aStatus['value'] == 1) {
+      $this->setErrorMessage('Cron is already active in database: ' . $cron_name . '_active is 1, please force run with -f once ensured it\' not running');
+      return false;
+    }
+    $this->setStatus($cron_name . "_active", "yesno", 1);
+    $this->setStatus($cron_name . '_starttime', 'date', time());
+    return true;
   }
 
   /**

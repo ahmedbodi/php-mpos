@@ -1,7 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 class Block extends Base {
   protected $table = 'blocks';
@@ -145,7 +143,7 @@ class Block extends Base {
    * @return bool
    **/
   public function setConfirmations($block_id, $confirmations) {
-    $stmt = $this->mysqli->prepare("UPDATE $this->table SET confirmations = ? WHERE id = ?");
+    $stmt = $this->mysqli->prepare("UPDATE $this->table SET confirmations = ? WHERE id = ? LIMIT 1");
     if ($this->checkStmt($stmt) && $stmt->bind_param("ii", $confirmations, $block_id) && $stmt->execute())
       return true;
     return $this->sqlError();
@@ -240,6 +238,21 @@ class Block extends Base {
     if (empty($block_id)) return false;
     $field = array( 'name' => 'accounted', 'value' => 1, 'type' => 'i');
     return $this->updateSingle($block_id, $field);
+  }
+
+  /**
+   * Fetch the average amount of the past N blocks
+   * @param limit int Block limit
+   * @param return mixed Block array or false
+   **/
+  public function getAverageAmount($limit=10) {
+    $stmt = $this->mysqli->prepare("SELECT IFNULL(AVG(amount), " . $this->config['reward'] . ") as avg_amount FROM ( SELECT amount FROM $this->table ORDER BY id DESC LIMIT ?) AS t1");
+    if ($this->checkStmt($stmt) && $stmt->bind_param('i', $limit) && $stmt->execute() && $result = $stmt->get_result()) {
+      return $result->fetch_object()->avg_amount;
+    } else {
+      $this->setErrorMessage('Failed to get average award from blocks');
+      return $this->sqlError();
+    }
   }
 }
 

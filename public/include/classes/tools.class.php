@@ -1,8 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY'))
-  die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 /**
  * Helper class for our cronjobs
@@ -22,6 +19,8 @@ class Tools extends Base {
     static $ch = null;
     if (is_null($ch)) {
       $ch = curl_init();
+      curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
+      curl_setopt($ch, CURLOPT_TIMEOUT, 30);
       curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
       curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/4.0 (compatible; PHP client; '.php_uname('s').'; PHP/'.phpversion().')');
     }
@@ -70,20 +69,25 @@ class Tools extends Base {
     // Check the API type for configured URL
     if (!$strApiType = $this->getApiType($this->config['price']['url']))
       return false;
-    // Extract price depending on API type
-    switch ($strApiType) {
-    case 'coinchose':
-      foreach ($aData as $aItem) {
-        if($strCurrency == $aItem[0])
-          return $aItem['price'];
+    // if api data is valid, extract price depending on API type
+    if (is_array($aData)) {
+      switch ($strApiType) {
+      	case 'coinchose':
+      	  foreach ($aData as $aItem) {
+      	    if($strCurrency == $aItem[0])
+      	      return $aItem['price'];
+      	  }
+      	  break;
+      	case 'btce':
+      	  return $aData['ticker']['last'];
+      	  break;
+      	case 'cryptsy':
+      	  return @$aData['return']['markets'][$strCurrency]['lasttradeprice'];
+      	  break;
       }
-      break;
-    case 'btce':
-      return $aData['ticker']['last'];
-      break;
-    case 'cryptsy':
-      return $aData['return']['markets'][$strCurrency]['lasttradeprice'];
-      break;
+    } else {
+      $this->setErrorMessage("Got an invalid response from ticker API");
+      return false;
     }
     // Catchall, we have no data extractor for this API url
     $this->setErrorMessage("Undefined API to getPrice() on URL " . $this->config['price']['url']);

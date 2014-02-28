@@ -1,8 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY'))
-  die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 class RoundStats extends Base {
   private $tableTrans = 'transactions';
@@ -107,7 +104,7 @@ class RoundStats extends Base {
         FROM " . $this->statistics->getTableName() . " AS s
         LEFT JOIN " . $this->block->getTableName() . " AS b ON s.block_id = b.id
         LEFT JOIN " . $this->user->getTableName() . " AS a ON a.id = s.account_id
-        WHERE b.height = ?
+        WHERE b.height = ? AND s.valid > 0
         GROUP BY username ASC
         ORDER BY valid DESC
         ");
@@ -136,7 +133,7 @@ class RoundStats extends Base {
         FROM " . $this->statistics->getTableName() . " AS s
         LEFT JOIN " . $this->block->getTableName() . " AS b ON s.block_id = b.id
         LEFT JOIN " . $this->user->getTableName() . " AS a ON a.id = s.account_id
-        WHERE b.height = ?
+        WHERE b.height = ? AND s.pplns_valid > 0
         GROUP BY username ASC
         ORDER BY pplns_valid DESC
         ");

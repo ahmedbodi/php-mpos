@@ -1,7 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 // Globally available variables
 $debug->append('Global smarty variables', 3);
@@ -28,7 +26,7 @@ if ( ! $dPoolHashrateModifier = $setting->getValue('statistics_pool_hashrate_mod
 $iCurrentPoolHashrate =  $statistics->getCurrentHashrate();
 
 // Avoid confusion, ensure our nethash isn't higher than poolhash
-if ($iCurrentPoolHashrate > $dNetworkHashrate) $dNetworkHashrate = $iCurrentPoolHashrate;
+if ($iCurrentPoolHashrate > $dNetworkHashrate / 1000) $dNetworkHashrate = $iCurrentPoolHashrate;
 
 // Baseline network hashrate for templates
 if ( ! $dPersonalHashrateModifier = $setting->getValue('statistics_personal_hashrate_modifier') ) $dPersonalHashrateModifier = 1;
@@ -49,7 +47,7 @@ if (! $statistics_ajax_refresh_interval = $setting->getValue('statistics_ajax_re
 if (! $statistics_ajax_long_refresh_interval = $setting->getValue('statistics_ajax_long_refresh_interval')) $statistics_ajax_long_refresh_interval = 10;
 
 // Small helper array
-$aHashunits = array( '1' => 'KH/s', '0.001' => 'MH/s', '0.000001' => 'GH/s' );
+$aHashunits = array( '1' => 'KH/s', '0.001' => 'MH/s', '0.000001' => 'GH/s', '0.000000001' => 'TH/s' );
 
 // Global data for Smarty
 $aGlobal = array(
@@ -62,9 +60,13 @@ $aGlobal = array(
   'roundshares' => $aRoundShares,
   'fees' => $config['fees'],
   'confirmations' => $config['confirmations'],
-  'reward' => $config['reward'],
+  'reward' => $config['reward_type'] == 'fixed' ? $config['reward'] : $block->getAverageAmount(),
   'price' => $setting->getValue('price'),
+  'twofactor' => $config['twofactor'],
+  'csrf' => $config['csrf'],
   'config' => array(
+    'recaptcha_enabled' => $setting->getValue('recaptcha_enabled'),
+    'recaptcha_enabled_logins' => $setting->getValue('recaptcha_enabled_logins'),
     'disable_navbar' => $setting->getValue('disable_navbar'),
     'disable_navbar_api' => $setting->getValue('disable_navbar_api'),
     'disable_payouts' => $setting->getValue('disable_payouts'),
@@ -83,7 +85,8 @@ $aGlobal = array(
     'price' => array( 'currency' => $config['price']['currency'] ),
     'targetdiff' => $config['difficulty'],
     'currency' => $config['currency'],
-    'txfee' => $config['txfee'],
+    'txfee_manual' => $config['txfee_manual'],
+    'txfee_auto' => $config['txfee_auto'],
     'payout_system' => $config['payout_system'],
     'ap_threshold' => array(
       'min' => $config['ap_threshold']['min'],
@@ -117,6 +120,11 @@ $aGlobal['acl']['block']['statistics'] = $setting->getValue('acl_block_statistic
 $aGlobal['acl']['round']['statistics'] = $setting->getValue('acl_round_statistics');
 $aGlobal['acl']['blockfinder']['statistics'] = $setting->getValue('acl_blockfinder_statistics');
 $aGlobal['acl']['uptime']['statistics'] = $setting->getValue('acl_uptime_statistics');
+$aGlobal['acl']['graphs']['statistics'] = $setting->getValue('acl_graphs_statistics');
+$aGlobal['acl']['donors']['page'] = $setting->getValue('acl_donors_page');
+$aGlobal['acl']['about']['page'] = $setting->getValue('acl_about_page');
+$aGlobal['acl']['contactform'] = $setting->getValue('acl_contactform');
+$aGlobal['acl']['chat']['page'] = $setting->getValue('acl_chat_page', 2);
 
 // We don't want these session infos cached
 if (@$_SESSION['USERDATA']['id']) {
@@ -124,10 +132,11 @@ if (@$_SESSION['USERDATA']['id']) {
   $aGlobal['userdata']['balance'] = $transaction->getBalance($_SESSION['USERDATA']['id']);
 
   // Other userdata that we can cache savely
-  $aGlobal['userdata']['shares'] = $statistics->getUserShares($_SESSION['USERDATA']['id']);
-  $aGlobal['userdata']['rawhashrate'] = $statistics->getUserHashrate($_SESSION['USERDATA']['id']);
+  $aGlobal['userdata']['shares'] = $statistics->getUserShares($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id']);
+  $aUserMiningStats = $statistics->getUserMiningStats($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id']);
+  $aGlobal['userdata']['rawhashrate'] = $aUserMiningStats['hashrate'];
   $aGlobal['userdata']['hashrate'] = $aGlobal['userdata']['rawhashrate'] * $dPersonalHashrateModifier;
-  $aGlobal['userdata']['sharerate'] = $statistics->getUserSharerate($_SESSION['USERDATA']['id']);
+  $aGlobal['userdata']['sharerate'] = $aUserMiningStats['sharerate'];
 
   switch ($config['payout_system']) {
   case 'prop':
@@ -146,10 +155,10 @@ if (@$_SESSION['USERDATA']['id']) {
     $aGlobal['userdata']['estimates'] = $aEstimates;
     break;
   case 'pps':
-    $aGlobal['userdata']['pps']['unpaidshares'] = $statistics->getUserUnpaidPPSShares($_SESSION['USERDATA']['id'], $setting->getValue('pps_last_share_id'));
+    $aGlobal['userdata']['pps']['unpaidshares'] = $statistics->getUserUnpaidPPSShares($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id'], $setting->getValue('pps_last_share_id'));
     $aGlobal['ppsvalue'] = number_format($statistics->getPPSValue(), 12);
     $aGlobal['poolppsvalue'] = $aGlobal['ppsvalue'] * pow(2, $config['difficulty'] - 16);
-    $aGlobal['userdata']['sharedifficulty'] = $statistics->getUserShareDifficulty($_SESSION['USERDATA']['id']);
+    $aGlobal['userdata']['sharedifficulty'] = $statistics->getUserShareDifficulty($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id']);
     $aGlobal['userdata']['estimates'] = $statistics->getUserEstimates($aGlobal['userdata']['sharerate'], $aGlobal['userdata']['sharedifficulty'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees'], $aGlobal['ppsvalue']);
     break;
   }
@@ -167,7 +176,39 @@ if ($motd = $setting->getValue('system_motd'))
   $_SESSION['POPUP'][] = array('CONTENT' => $motd, 'TYPE' => 'info');
 
 // So we can display additional info
-$smarty->assign('DEBUG', DEBUG);
+$smarty->assign('DEBUG', $config['DEBUG']);
+
+// Lets check for our cron status and render a message
+require_once(INCLUDE_DIR . '/config/monitor_crons.inc.php');
+$bMessage = false;
+$aCronMessage[] = 'We are investingating issues in the backend. Your shares and hashrate are safe and we will fix things ASAP.</br><br/>';
+foreach ($aMonitorCrons as $strCron) {
+  if ($monitoring->isDisabled($strCron) == 1) {
+    $bMessage = true;
+    switch ($strCron) {
+    case 'payouts':
+      $aCronMessage[] = '<li> Payouts disabled, you will not receive any coins to your offline wallet for the time being</li>';
+      break;
+    case 'findblock':
+      $aCronMessage[] = '<li> Findblocks disabled, new blocks will currently not show up in the frontend</li>';
+      break;
+    case 'blockupdate':
+      $aCronMessage[] = '<li> Blockupdate disabled, blocks and transactions confirmations are delayed</li>';
+      break;
+    case 'pplns_payout':
+      $aCronMessage[] = '<li> PPLNS payout disabled, round credit transactions are delayed</li>';
+      break;
+    case 'prop_payout':
+      $aCronMessage[] = '<li> Proportional payout disabled, round credit transactions are delayed</li>';
+      break;
+    case 'pps_payout':
+      $aCronMessage[] = '<li> PPS payout disabled, share credit transactions are delayed</li>';
+      break;
+    }
+  }
+}
+if ($bMessage)
+  $_SESSION['POPUP'][] = array('CONTENT' => implode($aCronMessage, ''));
 
 // Make it available in Smarty
 $smarty->assign('PATH', 'site_assets/' . THEME);

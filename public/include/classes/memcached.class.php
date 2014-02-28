@@ -1,4 +1,5 @@
 <?php
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 /**
  * A wrapper class which provides compatibility between Memcached and Memcache

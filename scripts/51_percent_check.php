@@ -19,21 +19,26 @@ limitations under the License.
 
  */
 
+/**
+ * Simple script to fetch all user accounts and their coin addresses, then runs
+ * them against the RPC to validate. Will allow admins to find users with invalid addresses.
+ **/
+
 // Change to working directory
 chdir(dirname(__FILE__));
 
 // Include all settings and classes
 require_once('shared.inc.php');
 
-// If we don't keep archives, delete some now to release disk space
-$affected_rows = $share->purgeArchive();
-if ($affected_rows === false) {
-  $log->logError("Failed to delete archived shares, not critical but should be checked: " . $share->getCronError());
-  $monitoring->endCronjob($cron_name, 'E0008', 0, false, false);
-} else {
-  $log->logDebug("Deleted $affected_rows archived shares this run");
-}
+// Fetch hashrates
+$dNetworkHashrate = $bitcoin->getnetworkhashps() / 1000;
+$dPoolHashrate = $statistics->getCurrentHashrate();
+$iPercentage = round(100 / $dNetworkHashrate * $dPoolHashrate, 0);
 
-// Cron cleanup and monitoring
-require_once('cron_end.inc.php');
+if ($iPercentage >= 51) {
+  echo 'Your pool has ' . $iPercentage . '% of the network hashrate. Registrations will be disabled.' . PHP_EOL;
+  $setting->setValue('lock_registration', 1);
+} else {
+  $setting->setValue('lock_registration', 0);
+}
 ?>

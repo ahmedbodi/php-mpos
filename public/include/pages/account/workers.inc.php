@@ -1,28 +1,41 @@
 <?php
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 if ($user->isAuthenticated()) {
   switch (@$_REQUEST['do']) {
   case 'delete':
-    if ($worker->deleteWorker($_SESSION['USERDATA']['id'], $_GET['id'])) {
-      $_SESSION['POPUP'][] = array('CONTENT' => 'Worker removed');
+    if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
+      if ($worker->deleteWorker($_SESSION['USERDATA']['id'], $_GET['id'])) {
+        $_SESSION['POPUP'][] = array('CONTENT' => 'Worker removed', 'TYPE' => 'success');
+      } else {
+        $_SESSION['POPUP'][] = array('CONTENT' => $worker->getError(), 'TYPE' => 'errormsg');
+      }
     } else {
-      $_SESSION['POPUP'][] = array('CONTENT' => $worker->getError(), 'TYPE' => 'errormsg');
+      $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
     }
     break;
+
   case 'add':
-    if ($worker->addWorker($_SESSION['USERDATA']['id'], $_POST['username'], $_POST['password'])) {
-      $_SESSION['POPUP'][] = array('CONTENT' => 'Worker added');
+    if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
+      if ($worker->addWorker($_SESSION['USERDATA']['id'], $_POST['username'], $_POST['password'])) {
+        $_SESSION['POPUP'][] = array('CONTENT' => 'Worker added', 'TYPE' => 'success');
+      } else {
+        $_SESSION['POPUP'][] = array('CONTENT' => $worker->getError(), 'TYPE' => 'errormsg');
+      }
     } else {
-      $_SESSION['POPUP'][] = array('CONTENT' => $worker->getError(), 'TYPE' => 'errormsg');
+      $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
     }
     break;
+
   case 'update':
-    if ($worker->updateWorkers($_SESSION['USERDATA']['id'], @$_POST['data'])) {
-      $_SESSION['POPUP'][] = array('CONTENT' => 'Worker updated');
+    if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
+      if ($worker->updateWorkers($_SESSION['USERDATA']['id'], @$_POST['data'])) {
+        $_SESSION['POPUP'][] = array('CONTENT' => 'Worker updated', 'TYPE' => 'success');
+      } else {
+        $_SESSION['POPUP'][] = array('CONTENT' => $worker->getError(), 'TYPE' => 'errormsg');
+      }
     } else {
-      $_SESSION['POPUP'][] = array('CONTENT' => $worker->getError(), 'TYPE' => 'errormsg');
+      $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
     }
     break;
   }
@@ -32,7 +45,6 @@ if ($user->isAuthenticated()) {
 
   $smarty->assign('WORKERS', $aWorkers);
 }
-
 $smarty->assign('CONTENT', 'default.tpl');
 
 ?>

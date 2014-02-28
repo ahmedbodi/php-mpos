@@ -1,8 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY'))
-  die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 class News extends Base {
   protected $table = 'news';
@@ -102,4 +99,5 @@ $news = new News();
 $news->setDebug($debug);
 $news->setMysql($mysqli);
 $news->setUser($user);
+$news->setErrorCodes($aErrorCodes);
 ?>

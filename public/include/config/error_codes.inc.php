@@ -1,7 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 $aErrorCodes['OK'] = 'OK';
 $aErrorCodes['E0001'] = 'Out of Order Share Detected';
@@ -73,4 +71,10 @@ $aErrorCodes['E0072'] = 'Worker names must be alphanumeric';
 $aErrorCodes['E0073'] = 'Worker name is too long; try entering a shorter name';
 $aErrorCodes['E0074'] = 'Failed deleting expired tokens';
 $aErrorCodes['E0075'] = 'Upgrade required';
+$aErrorCodes['E0076'] = 'No coins in wallet available';
+$aErrorCodes['E0077'] = 'RPC method or connection failed';
+$aErrorCodes['E0078'] = 'RPC method did not return 200 OK';
+$aErrorCodes['E0079'] = 'Wallet does not cover payouts total amount';
+$aErrorCodes['E0080'] = 'No new unaccounted shares since last run';
+$aErrorCodes['E0081'] = 'Failed to insert new block into database';
 ?>

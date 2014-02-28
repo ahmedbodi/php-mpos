@@ -1,7 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 // Check if the system is enabled
 if ($setting->getValue('disable_dashboard_api')) {
@@ -22,6 +20,7 @@ $supress_master = 1;
 
 // Check user token and access level permissions
 $user_id = $api->checkAccess($user->checkApiKey($_REQUEST['api_key']), @$_REQUEST['id']);
+$username = $user->getUsername($user_id);
 
 // Fetch RPC information
 if ($bitcoin->can_connect() === true) {
@@ -44,31 +43,27 @@ if ( ! $dNetworkHashrateModifier = $setting->getValue('statistics_network_hashra
 $statistics->setGetCache(false);
 $dPoolHashrate = $statistics->getCurrentHashrate($interval);
 if ($dPoolHashrate > $dNetworkHashrate) $dNetworkHashrate = $dPoolHashrate;
-$dPersonalHashrate = $statistics->getUserHashrate($user_id, $interval);
-$dPersonalSharerate = $statistics->getUserSharerate($user_id, $interval);
-$dPersonalShareDifficulty = $statistics->getUserShareDifficulty($user_id, $interval);
+$aUserMiningStats = $statistics->getUserMiningStats($username, $user_id, $interval);
+$dPersonalHashrate = $aUserMiningStats['hashrate'];
+$dPersonalSharerate = $aUserMiningStats['sharerate'];
+$dPersonalShareDifficulty = $aUserMiningStats['avgsharediff'];
 $statistics->setGetCache(true);
 
 // Use caches for this one
-$aUserRoundShares = $statistics->getUserShares($user_id);
+$aUserRoundShares = $statistics->getUserShares($username, $user_id);
 $aRoundShares = $statistics->getRoundShares();
 
 if ($config['payout_system'] != 'pps') {
   $aEstimates = $statistics->getUserEstimates($aRoundShares, $aUserRoundShares, $user->getUserDonatePercent($user_id), $user->getUserNoFee($user_id));
   $dUnpaidShares = 0;
 } else {
-  $dUnpaidShares = $statistics->getUserUnpaidPPSShares($user_id, $setting->getValue('pps_last_share_id'));
+  $dUnpaidShares = $statistics->getUserUnpaidPPSShares($username, $user_id, $setting->getValue('pps_last_share_id'));
   $aEstimates = $statistics->getUserEstimates($dPersonalSharerate, $dPersonalShareDifficulty, $user->getUserDonatePercent($user_id), $user->getUserNoFee($user_id), $statistics->getPPSValue());
 }
 
-$iTotalRoundShares = $aRoundShares['valid'] + $aRoundShares['invalid'];
-if ($iTotalRoundShares > 0) {
-  $dUserInvalidPercent = round($aUserRoundShares['invalid'] / $iTotalRoundShares * 100, 2);
-  $dPoolInvalidPercent = round($aRoundShares['invalid'] / $iTotalRoundShares * 100, 2);
-} else {
-  $dUserInvalidPercent = 0;
-  $dPoolInvalidPercent = 0;
-}
+// Round/user percentages
+$aRoundShares['valid'] + $aRoundShares['invalid'] > 0 ? $dPoolInvalidPercent = round($aRoundShares['invalid'] / ($aRoundShares['valid'] + $aRoundShares['invalid']) * 100, 2) : $dPoolInvalidPercent = 0;
+$aUserRoundShares['valid'] + $aUserRoundShares['valid'] > 0 ? $dUserInvalidPercent = round($aUserRoundShares['invalid'] / ($aUserRoundShares['valid'] + $aUserRoundShares['invalid']) * 100, 2) : $dUserInvalidPercent = 0;
 
 // Apply pool modifiers
 $dPersonalHashrateAdjusted = $dPersonalHashrate * $dPersonalHashrateModifier;
@@ -80,12 +75,9 @@ $aPrice = $setting->getValue('price');
 
 // Round progress
 $iEstShares = $statistics->getEstimatedShares($dDifficulty);
-if ($iEstShares > 0 && $aRoundShares['valid'] > 0) {
-  $dEstPercent = round(100 / $iEstShares * $aRoundShares['valid'], 2);
-} else {
-  $dEstPercent = 0;
-}
+$iEstShares > 0 && $aRoundShares['valid'] > 0 ? $dEstPercent = round(100 / $iEstShares * $aRoundShares['valid'], 2) : $dEstPercent = 0;
 
+// Some estimates
 $dExpectedTimePerBlock = $statistics->getNetworkExpectedTimePerBlock();
 $dEstNextDifficulty = $statistics->getExpectedNextDifficulty();
 $iBlocksUntilDiffChange = $statistics->getBlocksUntilDiffChange();

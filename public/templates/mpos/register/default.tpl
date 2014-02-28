@@ -1,5 +1,5 @@
 
-<form action="{$smarty.server.PHP_SELF}" method="post">
+<form action="{$smarty.server.SCRIPT_NAME}" method="post">
 <article class="module width_half">
   <header><h3>Register new account</h3></header>
   <div class="module_content">
@@ -7,16 +7,19 @@
 {if $smarty.request.token|default:""}
     <input type="hidden" name="token" value="{$smarty.request.token|escape}" />
 {/if}
+	<input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
     <input type="hidden" name="action" value="register">
     <fieldset>
       <label>Username</label>
       <input type="text" class="text tiny" name="username" value="{$smarty.post.username|escape|default:""}" size="15" maxlength="20" required>
     </fieldset>
     <fieldset>
-      <label>Password</label>
-      <input type="password" class="text tiny" name="password1" value="" size="15" maxlength="100" required>
+      <label>Password</label> 
+      <p style="padding-right:10px;display:block;margin-top:0px;float:right;color:#999;" id="pw_strength">Strength</p>
+      <input type="password" class="text tiny" name="password1" value="" size="15" maxlength="100" id="pw_field" required>
       <label>Repeat Password</label>
-      <input type="password" class="text tiny" name="password2" value="" size="15" maxlength="100" required>
+      <p style="padding-right:10px;display:block;margin-top:0px;float:right;" id="pw_match"></p>
+      <input type="password" class="text tiny" name="password2" value="" size="15" maxlength="100" id="pw_field2" required>
     </fieldset>
     <fieldset>
       <label>Email</label>
@@ -33,7 +36,7 @@
       <input type="checkbox" value="1" name="tac" id="tac">
       <label for="tac" style="margin:1px 0px 0px -20px"></label>
     </fieldset>
-    <center>{nocache}{$RECAPTCHA|default:""}{/nocache}</center>
+    <center>{nocache}{$RECAPTCHA|default:"" nofilter}{/nocache}</center>
   </div>
   <footer>
     <div class="submit_link">

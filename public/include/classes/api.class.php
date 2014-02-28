@@ -1,7 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 /**
  * Helper class for our API
@@ -30,20 +28,26 @@ class Api extends Base {
    * @return string JSON object
    **/
   function get_json($data, $force=false) {
-    return json_encode(
+    $json = json_encode(
       array( $_REQUEST['action'] => array(
         'version' => $this->api_version,
         'runtime' => (microtime(true) - $this->dStartTime) * 1000,
         'data' => $data
       )), $force ? JSON_FORCE_OBJECT : 0
     );
+    // JSONP support issue #1700
+    if (isset($_REQUEST['callback']))
+      return $_REQUEST['callback'] . '(' . $json . ');';
+    return $json;
   }
 
   /**
    * Check user access level to the API call
    **/
   function checkAccess($user_id, $get_id=NULL) {
-    if ( ! $this->user->isAdmin($user_id) && (!empty($get_id) && $get_id != $user_id)) {
+    if (!empty($get_id) && is_array($get_id)) die("Access denied");
+    if (is_array($user_id)) die("Access denied");
+    if ( ! $this->user->isAdmin($user_id) && (!empty($get_id) && $get_id != $user_id || !is_int($user_id))) {
       // User is NOT admin and tries to access an ID that is not their own
       header("HTTP/1.1 401 Unauthorized");
       die("Access denied");

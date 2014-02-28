@@ -1,8 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY'))
-  die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 class Notification extends Mail {
   var $table = 'notifications';
@@ -112,29 +109,18 @@ class Notification extends Mail {
     $this->debug->append("STA " . __METHOD__, 4);
     $failed = $ok = 0;
     foreach ($data as $type => $active) {
-      // Does an entry exist already
-      $stmt = $this->mysqli->prepare("SELECT * FROM $this->tableSettings WHERE account_id = ? AND type = ?");
-      if ($stmt && $stmt->bind_param('is', $account_id, $type) && $stmt->execute() && $stmt->store_result() && $stmt->num_rows() > 0) {
-        // We found a matching row
-        $stmt = $this->mysqli->prepare("UPDATE $this->tableSettings SET active = ? WHERE type = ? AND account_id = ?");
-        if ($stmt && $stmt->bind_param('isi', $active, $type, $account_id) && $stmt->execute() && $stmt->close()) {
-          $ok++;
-        } else {
-          $failed++;
-        }
+      $stmt = $this->mysqli->prepare("INSERT INTO $this->tableSettings (active, type, account_id) VALUES (?,?,?) ON DUPLICATE KEY UPDATE active = ?");
+      if ($stmt && $stmt->bind_param('isii', $active, $type, $account_id, $active) && $stmt->execute()) {
+        $ok++;
       } else {
-        $stmt = $this->mysqli->prepare("INSERT INTO $this->tableSettings (active, type, account_id) VALUES (?,?,?)");
-        if ($stmt && $stmt->bind_param('isi', $active, $type, $account_id) && $stmt->execute()) {
-          $ok++;
-        } else {
-          $failed++;
-        }
+        $failed++;
       }
     }
     if ($failed > 0) {
       $this->setErrorMessage($this->getErrorMsg('E0047', $failed));
-      return false;
+      return $this->sqlError();
     }
+    $this->log->log("info", "User $account_id updated notification settings");
     return true;
   }
 
@@ -160,15 +146,37 @@ class Notification extends Mail {
       }
     } else {
       $this->setErrorMessage('User disabled ' . $strType . ' notifications');
-      return false;
+      return true;
     }
     $this->setErrorMessage('Error sending mail notification');
     return false;
+  }
+
+  /**
+   * Cleanup old notifications
+   * @param none
+   * @return bool true or false
+   **/
+  public function cleanupNotifications($days=7) {
+    $failed = 0;
+    $this->deleted = 0;
+    $stmt = $this->mysqli->prepare("DELETE FROM $this->table WHERE time < (NOW() - ? * 24 * 60 * 60)");
+    if (! ($this->checkStmt($stmt) && $stmt->bind_param('i', $days) && $stmt->execute())) {
+      $failed++;
+    } else {
+      $this->deleted += $stmt->affected_rows;
+    }
+    if ($failed > 0) {
+      $this->setCronMessage('Failed to delete ' . $failed . ' notifications from ' . $this->table . ' table');
+      return false;
+    }
+    return true;
   }
 }
 
 $notification = new Notification();
 $notification->setDebug($debug);
+$notification->setLog($log);
 $notification->setMysql($mysqli);
 $notification->setSmarty($smarty);
 $notification->setConfig($config);

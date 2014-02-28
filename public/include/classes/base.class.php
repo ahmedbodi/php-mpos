@@ -1,8 +1,5 @@
 <?php
-
-// Make sure we are called from index.php
-if (!defined('SECURITY'))
-  die('Hacking attempt');
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 /**
  * Our base class that we extend our other classes from
@@ -22,6 +19,9 @@ class Base {
   public function setDebug($debug) {
     $this->debug = $debug;
   }
+  public function setLog($log) {
+    $this->log = $log;
+  }
   public function setMysql($mysqli) {
     $this->mysqli = $mysqli;
   }
@@ -31,11 +31,17 @@ class Base {
   public function setSalt($salt) {
     $this->salt = $salt;
   }
+  public function setSalty($salt) {
+    $this->salty = $salt;
+  }
   public function setSmarty($smarty) {
     $this->smarty = $smarty;
   }
   public function setUser($user) {
     $this->user = $user;
+  }
+  public function setSessionManager($session) {
+    $this->session = $session;
   }
   public function setConfig($config) {
     $this->config = $config;
@@ -48,6 +54,12 @@ class Base {
   }
   public function setBlock($block) {
     $this->block = $block;
+  }
+  public function setPayout($payout) {
+    $this->payout = $payout;
+  }
+  public function setNotification($notification) {
+    $this->notification = $notification;
   }
   public function setTransaction($transaction) {
     $this->transaction = $transaction;
@@ -69,6 +81,9 @@ class Base {
   }
   public function setTokenType($tokentype) {
     $this->tokentype = $tokentype;
+  }
+  public function setCSRFToken($token) {
+    $this->CSRFToken = $token;
   }
   public function setShare($share) {
     $this->share = $share;
@@ -133,9 +148,9 @@ class Base {
    * @param none
    * @param data mixed Count or false
    **/
-  public function getCountFiltered($column='id', $value=NULL, $type='i') {
+  public function getCountFiltered($column='id', $value=NULL, $type='i', $operator = '=') {
     $this->debug->append("STA " . __METHOD__, 4);
-    $stmt = $this->mysqli->prepare("SELECT COUNT(id) AS count FROM $this->table WHERE $column = ?");
+    $stmt = $this->mysqli->prepare("SELECT COUNT(id) AS count FROM $this->table WHERE $column $operator ?");
     if ($this->checkStmt($stmt) && $stmt->bind_param($type, $value) && $stmt->execute() && $result = $stmt->get_result())
       return $result->fetch_object()->count;
     return $this->sqlError();
@@ -238,7 +253,7 @@ class Base {
     if ($this->checkStmt($stmt) && $stmt->bind_param($field['type'].'i', $field['value'], $id) && $stmt->execute())
       return true;
     $this->debug->append("Unable to update " . $field['name'] . " with " . $field['value'] . " for ID $id");
-    $this->sqlError();
+    return $this->sqlError();
   }
 
   /**

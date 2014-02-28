@@ -1,22 +1,21 @@
 <?php
+$defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
-// Make sure we are called from index.php
-if (!defined('SECURITY')) die('Hacking attempt');
+// Fetch data from wallet, always run this check
+if ($bitcoin->can_connect() === true){
+  $dDifficulty = $bitcoin->getdifficulty();
+  $dNetworkHashrate = $bitcoin->getnetworkhashps();
+  $iBlock = $bitcoin->getblockcount();
+  is_int($iBlock) && $iBlock > 0 ? $sBlockHash = $bitcoin->getblockhash($iBlock) : $sBlockHash = '';
+} else {
+  $dDifficulty = 1;
+  $dNetworkHashrate = 1;
+  $iBlock = 0;
+  $_SESSION['POPUP'][] = array('CONTENT' => 'Unable to connect to wallet RPC service: ' . $bitcoin->can_connect(), 'TYPE' => 'errormsg');
+}
 
 if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $debug->append('No cached version available, fetching from backend', 3);
-  // Fetch data from wallet
-  if ($bitcoin->can_connect() === true){
-    $dDifficulty = $bitcoin->getdifficulty();
-    $dNetworkHashrate = $bitcoin->getnetworkhashps();
-    $iBlock = $bitcoin->getblockcount();
-    is_int($iBlock) && $iBlock > 0 ? $sBlockHash = $bitcoin->query('getblockhash', $iBlock) : $sBlockHash = '';
-  } else {
-    $dDifficulty = 1;
-    $dNetworkHashrate = 1;
-    $iBlock = 0;
-    $_SESSION['POPUP'][] = array('CONTENT' => 'Unable to connect to wallet RPC service: ' . $bitcoin->can_connect(), 'TYPE' => 'errormsg');
-  }
 
   // Top share contributors
   $aContributorsShares = $statistics->getTopContributors('shares', 15);
@@ -42,6 +41,9 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   } else {
     $dTimeSinceLast = 0;
   }
+
+  // Block average reward or fixed
+  $reward = $config['reward_type'] == 'fixed' ? $config['reward'] : $block->getAverageAmount();
 
     // Round progress
   $iEstShares = $statistics->getEstimatedShares($dDifficulty);
@@ -74,17 +76,22 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
     $smarty->assign("LASTBLOCK", 0);
   }
   $smarty->assign("DIFFICULTY", $dDifficulty);
-  $smarty->assign("REWARD", $config['reward']);
+  $smarty->assign("REWARD", $reward);
 } else {
   $debug->append('Using cached page', 3);
 }
 
-// Public / private page detection
-if ($setting->getValue('acl_pool_statistics')) {
+switch($setting->getValue('acl_pool_statistics', 1)) {
+case '0':
+  if ($user->isAuthenticated()) {
+    $smarty->assign("CONTENT", "default.tpl");
+  }
+  break;
+case '1':
   $smarty->assign("CONTENT", "default.tpl");
-} else if ($user->isAuthenticated() && ! $setting->getValue('acl_pool_statistics')) {
-  $smarty->assign("CONTENT", "default.tpl");
-} else {
-  $smarty->assign("CONTENT", "../default.tpl");
+  break;
+case '2':
+  $_SESSION['POPUP'][] = array('CONTENT' => 'Page currently disabled. Please try again later.', 'TYPE' => 'errormsg');
+  $smarty->assign("CONTENT", "");
+  break;
 }
-?>
